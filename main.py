@@ -76,10 +76,9 @@ def initialize_positions():
         coin = f"KRW-{b['currency']}"
         amount = float(b['balance'])
         if amount > 0:
-            current_price = get_current_price(coin)
             positions[coin] = {
                 "holding": True,
-                "entry_price": current_price  # 대안: 평균 매수가를 따로 불러올 수도 있음
+                "entry_price": int(b.get('avg_buy_price', 0))  # 대안: 평균 매수가를 따로 불러올 수도 있음
             }
         else:
             positions[coin] = {"holding": False, "entry_price": 0}
