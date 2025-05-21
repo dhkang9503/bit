@@ -78,7 +78,7 @@ def initialize_positions():
         if amount > 0:
             positions[coin] = {
                 "holding": True,
-                "entry_price": int(b.get('avg_buy_price', 0))  # 대안: 평균 매수가를 따로 불러올 수도 있음
+                "entry_price": float(b.get('avg_buy_price', 0))  # 대안: 평균 매수가를 따로 불러올 수도 있음
             }
         else:
             positions[coin] = {"holding": False, "entry_price": 0}
