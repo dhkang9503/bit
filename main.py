@@ -16,6 +16,8 @@ SECRET_KEY = os.environ["UPBIT_SECRET_KEY"]
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
+print(ACCESS_KEY[:5], SECRET_KEY[:5], TELEGRAM_TOKEN[:5], TELEGRAM_CHAT_ID[:5])
+
 upbit = pyupbit.Upbit(ACCESS_KEY, SECRET_KEY)
 
 skip_coins = ['KRW', 'DOGE', 'APENFT']
