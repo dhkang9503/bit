@@ -101,42 +101,43 @@ while True:
         print(f"[{datetime.datetime.now()}] 감시 중인 상위 알트코인: {top_coins}")
 
         # 2. 매수 로직 (상위 코인 기준)
-        for coin in top_coins:
-            if coin not in positions:
-                positions[coin] = {"holding": False, "entry_price": 0}
+        if upbit.get_balance("KRW") > 10000:
+            for coin in top_coins:
+                if coin not in positions:
+                    positions[coin] = {"holding": False, "entry_price": 0}
 
-            if positions[coin]["holding"]:
-                continue  # 이미 보유 중이면 매수 안함
+                if positions[coin]["holding"]:
+                    continue  # 이미 보유 중이면 매수 안함
 
-            df = pyupbit.get_ohlcv(coin, interval="minute5", count=50)
-            if df is None:
-                continue
+                df = pyupbit.get_ohlcv(coin, interval="minute5", count=50)
+                if df is None:
+                    continue
 
-            sma5 = df['close'].rolling(window=5).mean().iloc[-1]
-            sma15 = df['close'].rolling(window=15).mean().iloc[-1]
-            prev_sma5 = df['close'].rolling(window=5).mean().iloc[-2]
-            prev_sma15 = df['close'].rolling(window=15).mean().iloc[-2]
-            rsi = get_rsi(df['close']).iloc[-1]
-            price = get_current_price(coin)
+                sma5 = df['close'].rolling(window=5).mean().iloc[-1]
+                sma15 = df['close'].rolling(window=15).mean().iloc[-1]
+                prev_sma5 = df['close'].rolling(window=5).mean().iloc[-2]
+                prev_sma15 = df['close'].rolling(window=15).mean().iloc[-2]
+                rsi = get_rsi(df['close']).iloc[-1]
+                price = get_current_price(coin)
 
-            if sma5 > sma15 and prev_sma5 <= prev_sma15 and rsi < 50:
-                krw = upbit.get_balance("KRW")
-                send_telegram(
-                    f"📡 매수 감지: {coin}\n"
-                    f"조건 충족: 골든크로스 & RSI < 50\n\n"
-                    f"현재가: {price:,.0f}원\n"
-                    f"RSI: {rsi:.2f}\n"
-                    f"진입 후보로 감시 중입니다."
-                )
+                if sma5 > sma15 and prev_sma5 <= prev_sma15 and rsi < 50:
+                    krw = upbit.get_balance("KRW")
+                    send_telegram(
+                        f"📡 매수 감지: {coin}\n"
+                        f"조건 충족: 골든크로스 & RSI < 50\n\n"
+                        f"현재가: {price:,.0f}원\n"
+                        f"RSI: {rsi:.2f}\n"
+                        f"진입 후보로 감시 중입니다."
+                    )
 
-                if krw > 10000:
-                    invest_amount = krw * REINVEST_RATIO
-                    upbit.buy_market_order(coin, invest_amount)
+                    if krw > 10000:
+                        invest_amount = krw * REINVEST_RATIO
+                        upbit.buy_market_order(coin, invest_amount)
 
-                    positions[coin]["holding"] = True
-                    positions[coin]["entry_price"] = price
-                    msg = f"✅ 매수: {coin}\n가격: {price:.0f}\nRSI: {rsi:.2f}"
-                    send_telegram(msg)
+                        positions[coin]["holding"] = True
+                        positions[coin]["entry_price"] = price
+                        msg = f"✅ 매수: {coin}\n가격: {price:.0f}\nRSI: {rsi:.2f}"
+                        send_telegram(msg)
 
         # 3. 매도 로직 (내 보유 코인 기준)
         balances = upbit.get_balances()
