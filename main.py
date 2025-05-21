@@ -5,9 +5,6 @@ import traceback
 import datetime
 import pandas as pd
 import requests
-import subprocess
-
-subprocess.call(['bash', 'env.sh'])
 
 # API 키 입력
 ACCESS_KEY = os.environ["UPBIT_ACCESS_KEY"]
@@ -16,7 +13,6 @@ SECRET_KEY = os.environ["UPBIT_SECRET_KEY"]
 TELEGRAM_TOKEN = os.environ["TELEGRAM_TOKEN"]
 TELEGRAM_CHAT_ID = os.environ["TELEGRAM_CHAT_ID"]
 
-print(ACCESS_KEY[:5], SECRET_KEY[:5], TELEGRAM_TOKEN[:5], TELEGRAM_CHAT_ID[:5])
 
 upbit = pyupbit.Upbit(ACCESS_KEY, SECRET_KEY)
 
@@ -91,7 +87,8 @@ def initialize_positions():
 
 REINVEST_RATIO = 0.98  # 100% 재투자
 
-send_telegram("✅ initialized")
+send_telegram(f"✅ initialized: {upbit.get_balance("KRW")}")
+send_telegram(f"{ACCESS_KEY[:5]}, {SECRET_KEY[:5]}, {TELEGRAM_TOKEN[:5]}, {TELEGRAM_CHAT_ID[:5]}")
 
 # 메인 루프
 while True:
