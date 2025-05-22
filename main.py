@@ -165,7 +165,7 @@ while True:
                 msg = f"🚨 매도: {coin}\n가격: {price:.0f}\n수익률: {pnl*100:.2f}%\nRSI: {rsi:.2f}"
                 send_telegram(msg)
 
-        time.sleep(30)
+        time.sleep(20)
 
     except Exception as e:
         err_msg = f"[자동매매 오류 발생]\n{traceback.format_exc()}"
