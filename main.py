@@ -121,13 +121,6 @@ while True:
 
                 if sma5 > sma15 and prev_sma5 <= prev_sma15 and rsi < 50:
                     krw = upbit.get_balance("KRW")
-                    send_telegram(
-                        f"📡 매수 감지: {coin}\n"
-                        f"조건 충족: 골든크로스 & RSI < 50\n\n"
-                        f"현재가: {price:,.0f}원\n"
-                        f"RSI: {rsi:.2f}\n"
-                        f"진입 후보로 감시 중입니다."
-                    )
 
                     if krw > 10000:
                         invest_amount = krw * REINVEST_RATIO
@@ -135,7 +128,7 @@ while True:
 
                         positions[coin]["holding"] = True
                         positions[coin]["entry_price"] = price
-                        msg = f"✅ 매수: {coin}\n가격: {price:.0f}\nRSI: {rsi:.2f}"
+                        msg = f"✅ 매수: {coin}\n가격: {price:,.0f}\nRSI: {rsi:.2f}"
                         send_telegram(msg)
 
         # 3. 매도 로직 (내 보유 코인 기준)
@@ -159,13 +152,13 @@ while True:
             entry = positions.get(coin, {}).get("entry_price", price)
             pnl = (price - entry) / entry if entry else 0
 
-            if rsi > 70 or pnl >= 0.015 or pnl <= -0.01:
+            if rsi > 70 or pnl >= 0.02 or pnl <= -0.01:
                 upbit.sell_market_order(coin, vol)
                 positions[coin] = {"holding": False, "entry_price": 0}
-                msg = f"🚨 매도: {coin}\n가격: {price:.0f}\n수익률: {pnl*100:.2f}%\nRSI: {rsi:.2f}"
+                msg = f"🚨 매도: {coin}\n구매가: {entry:,.0f}, 현재가: {price:,.0f}\n수익률: {pnl*100:.2f}%\nRSI: {rsi:.2f}"
                 send_telegram(msg)
 
-        time.sleep(20)
+        time.sleep(10)
 
     except Exception as e:
         err_msg = f"[자동매매 오류 발생]\n{traceback.format_exc()}"
