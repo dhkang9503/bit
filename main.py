@@ -86,8 +86,8 @@ def initialize_positions():
 
 REINVEST_RATIO = 0.98  # 100% 재투자
 
-send_telegram(f"✅ initialized: {upbit.get_balance("KRW")}")
-send_telegram(f"{ACCESS_KEY[:5]}, {SECRET_KEY[:5]}, {TELEGRAM_TOKEN[:5]}, {TELEGRAM_CHAT_ID[:5]}")
+send_telegram(f"✅ initialized: {upbit.get_balance("KRW"):,.0f}")
+# send_telegram(f"{ACCESS_KEY[:5]}, {SECRET_KEY[:5]}, {TELEGRAM_TOKEN[:5]}, {TELEGRAM_CHAT_ID[:5]}")
 
 # 메인 루프
 while True:
@@ -152,10 +152,10 @@ while True:
             entry = positions.get(coin, {}).get("entry_price", price)
             pnl = (price - entry) / entry if entry else 0
 
-            if rsi > 70 or pnl >= 0.02 or pnl <= -0.01:
+            if pnl >= 0.02 or pnl <= -0.01: # rsi > 70 or 
                 upbit.sell_market_order(coin, vol)
                 positions[coin] = {"holding": False, "entry_price": 0}
-                msg = f"🚨 매도: {coin}\n구매가: {entry:,.0f}, 현재가: {price:,.0f}\n수익률: {pnl*100:.2f}%\nRSI: {rsi:.2f}"
+                msg = f"🚨 매도: {coin}\n구매가: {entry:,.0f}\n현재가: {price:,.0f}\n수익률: {pnl*100:.2f}%\nRSI: {rsi:.2f}"
                 send_telegram(msg)
 
         time.sleep(10)
