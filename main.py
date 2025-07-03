@@ -142,11 +142,18 @@ while True:
             continue
 
         tickers = pyupbit.get_tickers(fiat="KRW")
-        top5 = sorted(
-            [(t, pyupbit.get_ohlcv(t, 'day', 1)['volume'].iloc[-1] * pyupbit.get_ohlcv(t, 'day', 1)['close'].iloc[-1])
-             for t in tickers if t not in ["KRW-BTC", "KRW-DOGE"]],
-            key=lambda x: x[1], reverse=True
-        )[:5]
+        top5 = []
+        for t in tickers:
+            if t in ["KRW-BTC", "KRW-DOGE"]:
+                continue
+            df = pyupbit.get_ohlcv(t, 'day', count=1)
+            if df is None or df.empty:
+                continue
+            volume = df['volume'].iloc[-1]
+            close = df['close'].iloc[-1]
+            top5.append((t, volume * close))
+
+        top5 = sorted(top5, key=lambda x: x[1], reverse=True)[:5]
 
         for coin, _ in top5:
             if coin not in positions:
