@@ -74,7 +74,7 @@ def trade():
                 elif rsi > 70 and coin_balance > 0:
                     sell_crypto(ticker, coin_balance)
 
-            time.sleep(60)
+            time.sleep(10)
 
         except Exception as e:
             send_telegram(f"❗에러 발생: {e}")
