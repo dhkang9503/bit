@@ -4,27 +4,23 @@ import pyupbit
 import requests
 import datetime
 
-# 환경 변수에서 키 로드
 ACCESS_KEY = os.environ.get("UPBIT_ACCESS_KEY")
 SECRET_KEY = os.environ.get("UPBIT_SECRET_KEY")
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
-# 업비트 로그인
 upbit = pyupbit.Upbit(ACCESS_KEY, SECRET_KEY)
 
-# 텔레그램 메시지 전송 함수
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
     try:
         requests.post(url, data=payload)
     except Exception as e:
-        print("텔레그램 전송 오류:", e)
+        print("텔레그램 전송 실패:", e)
 
-# RSI 계산 함수
 def get_rsi(df, period=14):
-    delta = df["close"].diff()
+    delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
 
@@ -35,46 +31,60 @@ def get_rsi(df, period=14):
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
-# 매수 함수
+def get_price(ticker):
+    return pyupbit.get_current_price(ticker)
+
+def get_balance(symbol):
+    balances = upbit.get_balances()
+    for b in balances:
+        if b['currency'] == symbol:
+            return float(b['balance']), float(b.get('avg_buy_price', 0))
+    return 0, 0
+
 def buy_crypto(ticker, krw_balance):
-    price = pyupbit.get_current_price(ticker)
-    if price and krw_balance > 5000:
-        unit = krw_balance * 0.9995 / price
-        result = upbit.buy_market_order(ticker, krw_balance * 0.9995)
-        msg = f"[매수] {ticker} - 수량: {unit:.6f}, 가격: {price:.0f}"
-        send_telegram(msg)
+    price = get_price(ticker)
+    if price is None or krw_balance < 6000:
+        return
+    upbit.buy_market_order(ticker, krw_balance * 0.9995)
+    send_telegram(f"[매수] {ticker} / 금액: {krw_balance:.0f}원 / 가격: {price:.0f}")
 
-# 매도 함수
-def sell_crypto(ticker, volume):
-    price = pyupbit.get_current_price(ticker)
-    if price and volume > 0:
-        result = upbit.sell_market_order(ticker, volume)
-        msg = f"[매도] {ticker} - 수량: {volume:.6f}, 가격: {price:.0f}"
-        send_telegram(msg)
+def sell_crypto(ticker, volume, reason="익절/손절"):
+    price = get_price(ticker)
+    if price is None or volume < 0.0001:
+        return
+    upbit.sell_market_order(ticker, volume)
+    send_telegram(f"[매도-{reason}] {ticker} / 수량: {volume:.6f} / 가격: {price:.0f}")
 
-# 메인 루프
 def trade():
-    target_coins = ["KRW-BTC", "KRW-ETH"]
-    send_telegram("📈 단타봇 시작")
+    tickers = ["KRW-BTC", "KRW-ETH"]
+    send_telegram("📈 단타 봇 시작됨 (RSI + 수익률 조건)")
 
     while True:
         try:
-            for ticker in target_coins:
+            for ticker in tickers:
+                symbol = ticker.split("-")[1]
                 df = pyupbit.get_ohlcv(ticker, interval="minute5", count=100)
                 if df is None or len(df) < 15:
                     continue
 
                 rsi = get_rsi(df).iloc[-1]
-                balances = upbit.get_balances()
-                krw_balance = float(next((b['balance'] for b in balances if b['currency'] == "KRW"), 0))
-                coin_balance = float(next((b['balance'] for b in balances if b['currency'] in ticker.split("-")[1]), 0))
+                balance, avg_price = get_balance(symbol)
+                current_price = get_price(ticker)
+                krw_balance, _ = get_balance("KRW")
 
-                if rsi < 30:
+                # 손절 조건
+                if balance > 0:
+                    change_ratio = (current_price - avg_price) / avg_price
+                    if change_ratio <= -0.01:
+                        sell_crypto(ticker, balance, reason="손절")
+                    elif rsi > 70 and change_ratio >= 0.03:
+                        sell_crypto(ticker, balance, reason="익절(RSI70 + 수익률)")
+
+                # 매수 조건
+                elif rsi < 30 and krw_balance > 6000:
                     buy_crypto(ticker, krw_balance)
-                elif rsi > 70 and coin_balance > 0:
-                    sell_crypto(ticker, coin_balance)
 
-            time.sleep(10)
+            time.sleep(0.12)
 
         except Exception as e:
             send_telegram(f"❗에러 발생: {e}")
