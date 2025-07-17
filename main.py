@@ -46,14 +46,14 @@ def buy_crypto(ticker, krw_balance):
     if price is None or krw_balance < 6000:
         return
     upbit.buy_market_order(ticker, krw_balance * 0.9995)
-    send_telegram(f"[매수] {ticker} / 금액: {krw_balance:.0f}원 / 가격: {price:.0f}")
+    send_telegram(f"[매수] {ticker}₩n금액: {krw_balance:,.0f}원₩n가격: {price:,.0f}")
 
 def sell_crypto(ticker, volume, reason="익절/손절"):
     price = get_price(ticker)
     if price is None or volume < 0.0001:
         return
     upbit.sell_market_order(ticker, volume)
-    send_telegram(f"[매도-{reason}] {ticker} / 수량: {volume:.6f} / 가격: {price:.0f}")
+    send_telegram(f"[매도-{reason}] {ticker}₩n수량: {volume:,.6f}₩n가격: {price:,.0f}")
 
 def trade():
     tickers = ["KRW-BTC", "KRW-ETH"]
