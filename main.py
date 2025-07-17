@@ -56,7 +56,7 @@ def sell_crypto(ticker, volume, reason="익절/손절"):
     send_telegram(f"[매도-{reason}] {ticker}₩n수량: {volume:,.6f}₩n가격: {price:,.0f}")
 
 def trade():
-    tickers = ["KRW-BTC", "KRW-ETH"]
+    tickers = ["KRW-BTC", "KRW-ETH", "KRW-XRP"]
     send_telegram("📈 단타 봇 시작됨 (RSI + 수익률 조건)")
 
     while True:
