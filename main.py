@@ -46,18 +46,36 @@ def buy_crypto(ticker, krw_balance):
     if price is None or krw_balance < 6000:
         return
     upbit.buy_market_order(ticker, krw_balance * 0.9995)
-    send_telegram(f"[매수] {ticker}₩n금액: {krw_balance:,.0f}원₩n가격: {price:,.0f}")
+    send_telegram(f"[매수] {ticker}\n금액: {krw_balance:,.0f}원\n가격: {price:,.0f}")
 
 def sell_crypto(ticker, volume, reason="익절/손절"):
     price = get_price(ticker)
     if price is None or volume < 0.0001:
         return
     upbit.sell_market_order(ticker, volume)
-    send_telegram(f"[매도-{reason}] {ticker}₩n수량: {volume:,.6f}₩n가격: {price:,.0f}")
+    send_telegram(f"[매도-{reason}] {ticker}\n수량: {volume:,.6f}\n가격: {price:,.0f}")
+
+def get_top_volume_altcoins(n=3):
+    tickers = pyupbit.get_tickers(fiat="KRW")
+    tickers = [t for t in tickers if not t.endswith("BTC")]
+
+    volumes = []
+    for ticker in tickers:
+        try:
+            df = pyupbit.get_ohlcv(ticker, interval="minute5", count=2)
+            if df is not None and len(df) >= 2:
+                volume = df['volume'].iloc[-2] * df['close'].iloc[-2]
+                volumes.append((ticker, volume))
+            time.sleep(0.05)  # API 과호출 방지
+        except:
+            continue
+
+    volumes.sort(key=lambda x: x[1], reverse=True)
+    return [v[0] for v in volumes[:n]]
 
 def trade():
-    tickers = ["KRW-BTC", "KRW-ETH", "KRW-XRP"]
-    send_telegram("📈 단타 봇 시작됨 (RSI + 수익률 조건)")
+    tickers = get_top_volume_altcoins()
+    send_telegram("📈 단타 봇 시작됨 (RSI + 수익률 조건)\nTop 거래량 종목: " + ', '.join(tickers))
 
     while True:
         try:
