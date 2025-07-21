@@ -74,11 +74,11 @@ def get_top_volume_altcoins(n=3):
     return [v[0] for v in volumes[:n]]
 
 def trade():
-    tickers = get_top_volume_altcoins()
     send_telegram("📈 단타 봇 시작됨 (RSI + 수익률 조건)\nTop 거래량 종목: " + ', '.join(tickers))
 
     while True:
         try:
+            tickers = get_top_volume_altcoins()
             for ticker in tickers:
                 symbol = ticker.split("-")[1]
                 df = pyupbit.get_ohlcv(ticker, interval="minute5", count=100)
