@@ -2,7 +2,7 @@ import os
 import time
 import pyupbit
 import requests
-import datetime
+import pandas as pd
 
 ACCESS_KEY = os.environ.get("UPBIT_ACCESS_KEY")
 SECRET_KEY = os.environ.get("UPBIT_SECRET_KEY")
@@ -10,7 +10,9 @@ TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 
 upbit = pyupbit.Upbit(ACCESS_KEY, SECRET_KEY)
+holding = {}  # {ticker: {'entry_price': float, 'volume': float, 'atr': float}}
 
+# === Telegram 전송 ===
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
     payload = {"chat_id": TELEGRAM_CHAT_ID, "text": message}
@@ -19,18 +21,28 @@ def send_telegram(message):
     except Exception as e:
         print("텔레그램 전송 실패:", e)
 
+# === 보조 지표들 ===
+def get_ema(df, period):
+    return df['close'].ewm(span=period).mean()
+
 def get_rsi(df, period=14):
     delta = df['close'].diff()
     gain = delta.where(delta > 0, 0)
     loss = -delta.where(delta < 0, 0)
-
     avg_gain = gain.rolling(window=period).mean()
     avg_loss = loss.rolling(window=period).mean()
-
     rs = avg_gain / avg_loss
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
+    return 100 - (100 / (1 + rs))
 
+def get_atr(df, period=14):
+    high_low = df['high'] - df['low']
+    high_close = (df['high'] - df['close'].shift()).abs()
+    low_close = (df['low'] - df['close'].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.rolling(window=period).mean()
+    return atr
+
+# === 잔고/시세 ===
 def get_price(ticker):
     return pyupbit.get_current_price(ticker)
 
@@ -41,20 +53,7 @@ def get_balance(symbol):
             return float(b['balance']), float(b.get('avg_buy_price', 0))
     return 0, 0
 
-def buy_crypto(ticker, krw_balance):
-    price = get_price(ticker)
-    if price is None or krw_balance < 6000:
-        return
-    upbit.buy_market_order(ticker, krw_balance * 0.9995)
-    send_telegram(f"[매수] {ticker}\n금액: {krw_balance:,.0f}원\n가격: {price:,.0f}")
-
-def sell_crypto(ticker, volume, reason="익절/손절"):
-    price = get_price(ticker)
-    if price is None or volume < 0.0001:
-        return
-    upbit.sell_market_order(ticker, volume)
-    send_telegram(f"[매도-{reason}] {ticker}\n수량: {volume:,.6f}\n가격: {price:,.0f}")
-
+# === 상위 거래량 알트코인 선택 ===
 def get_top_volume_altcoins(n=3):
     tickers = pyupbit.get_tickers(fiat="KRW")
     tickers = [t for t in tickers if not t.endswith("BTC")]
@@ -66,43 +65,109 @@ def get_top_volume_altcoins(n=3):
             if df is not None and len(df) >= 2:
                 volume = df['volume'].iloc[-2] * df['close'].iloc[-2]
                 volumes.append((ticker, volume))
-            time.sleep(0.05)  # API 과호출 방지
+            time.sleep(0.05)
         except:
             continue
 
     volumes.sort(key=lambda x: x[1], reverse=True)
     return [v[0] for v in volumes[:n]]
 
+# === 매수 실행 ===
+def buy_crypto(ticker, krw_balance, atr):
+    price = get_price(ticker)
+    if price is None or krw_balance < 6000:
+        return
+
+    amount = krw_balance * 0.9995
+    volume = amount / price
+    upbit.buy_market_order(ticker, amount)
+
+    holding[ticker] = {'entry_price': price, 'volume': volume, 'atr': atr}
+
+    send_telegram(
+        f"[📥 매수] {ticker}\n"
+        f"매수 금액 : {amount:,.0f}원\n"
+        f"매수 가격 : {price:,.0f}원\n"
+        f"보유 수량 : {volume:.4f}개\n"
+        f"ATR (5분) : {atr:.4f}"
+    )
+
+# === 매도 실행 ===
+def sell_crypto(ticker, reason):
+    info = holding.get(ticker)
+    if not info:
+        return
+
+    volume = info['volume']
+    entry_price = info['entry_price']
+    current_price = get_price(ticker)
+    if current_price is None or volume < 0.0001:
+        return
+
+    upbit.sell_market_order(ticker, volume)
+    profit_rate = (current_price - entry_price) / entry_price
+    profit = (current_price - entry_price) * volume
+
+    send_telegram(
+        f"[📤 매도-{reason}] {ticker}\n"
+        f"매수가 : {entry_price:,.0f}원\n"
+        f"현재가 : {current_price:,.0f}원\n"
+        f"수익률 : {profit_rate * 100:+.2f}%\n"
+        f"수익금 : {profit:+,.0f}원\n"
+        f"보유 수량 : {volume:.4f}개"
+    )
+
+    del holding[ticker]
+
+# === 메인 루프 ===
 def trade():
-    send_telegram("📈 단타 봇 시작됨 (RSI + 수익률 조건)")
+    send_telegram("🚀 전략 시작: 추세+RSI+ATR 기반 진입")
 
     while True:
         try:
             tickers = get_top_volume_altcoins()
+            krw_balance, _ = get_balance("KRW")
+
             for ticker in tickers:
                 symbol = ticker.split("-")[1]
-                df = pyupbit.get_ohlcv(ticker, interval="minute5", count=100)
-                if df is None or len(df) < 15:
+
+                df_5 = pyupbit.get_ohlcv(ticker, interval="minute5", count=100)
+                df_15 = pyupbit.get_ohlcv(ticker, interval="minute15", count=50)
+                if df_5 is None or df_15 is None:
                     continue
 
-                rsi = get_rsi(df).iloc[-1]
-                balance, avg_price = get_balance(symbol)
+                ema9 = get_ema(df_15, 9).iloc[-1]
+                ema21 = get_ema(df_15, 21).iloc[-1]
+                if ema9 <= ema21:
+                    continue
+
+                rsi = get_rsi(df_5).iloc[-1]
+                if rsi >= 30:
+                    continue
+
+                if ticker in holding:
+                    continue
+
+                atr = get_atr(df_5).iloc[-1]
+                buy_crypto(ticker, krw_balance * 0.05, atr)
+
+            # 보유 코인 평가 후 익절/손절 판단
+            for ticker in list(holding.keys()):
+                info = holding[ticker]
                 current_price = get_price(ticker)
-                krw_balance, _ = get_balance("KRW")
+                if current_price is None:
+                    continue
 
-                # 손절 조건
-                if balance > 0:
-                    change_ratio = (current_price - avg_price) / avg_price
-                    if change_ratio <= -0.01:
-                        sell_crypto(ticker, balance, reason="손절")
-                    elif rsi > 70 and change_ratio >= 0.03:
-                        sell_crypto(ticker, balance, reason="익절(RSI70 + 수익률)")
+                entry_price = info['entry_price']
+                atr = info['atr']
+                change = (current_price - entry_price) / entry_price
 
-                # 매수 조건
-                elif rsi < 30 and krw_balance > 6000:
-                    buy_crypto(ticker, krw_balance)
+                if change >= (atr / entry_price) * 1.5:
+                    sell_crypto(ticker, reason="익절")
+                elif change <= -(atr / entry_price) * 1.0:
+                    sell_crypto(ticker, reason="손절")
 
-            time.sleep(0.12)
+            time.sleep(0.15)
 
         except Exception as e:
             send_telegram(f"❗에러 발생: {e}")
