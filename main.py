@@ -119,6 +119,31 @@ def sell_crypto(ticker, reason):
 
     del holding[ticker]
 
+def initialize_holding():
+    balances = upbit.get_balances()
+    for b in balances:
+        currency = b['currency']
+        if currency == "KRW":
+            continue
+        volume = float(b['balance'])
+        avg_price = float(b.get('avg_buy_price', 0))
+        if volume > 0 and avg_price > 0:
+            ticker = f"KRW-{currency}"
+            current_price = get_price(ticker)
+            df_5 = pyupbit.get_ohlcv(ticker, interval="minute5", count=100)
+            if df_5 is None:
+                continue
+            atr = get_atr(df_5).iloc[-1]
+
+            holding[ticker] = {
+                'entry_price': avg_price,
+                'volume': volume,
+                'atr': atr
+            }
+
+    send_telegram("✅ 기존 포지션 정보 초기화 완료")
+
+
 # === 메인 루프 ===
 def trade():
     send_telegram("🚀 전략 시작: 추세+RSI+ATR 기반 진입")
@@ -174,4 +199,5 @@ def trade():
             time.sleep(60)
 
 if __name__ == "__main__":
+    initialize_holding()
     trade()
