@@ -162,7 +162,7 @@ def trade():
                 atr = info['atr']
                 change = (current_price - entry_price) / entry_price
 
-                if change >= (atr / entry_price) * 1.5:
+                if change >= (atr / entry_price) * 1.5 * 10:
                     sell_crypto(ticker, reason="익절")
                 elif change <= -(atr / entry_price) * 1.0:
                     sell_crypto(ticker, reason="손절")
