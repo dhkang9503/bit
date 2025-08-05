@@ -14,9 +14,11 @@ upbit = pyupbit.Upbit(ACCESS_KEY, SECRET_KEY)
 
 holding = {}
 daily_loss = 0
+is_stopped = False
 MAX_DAILY_LOSS = 0.05  # -5%
 MAX_HOLDINGS = 2
 RESET_HOUR = 9
+
 
 def send_telegram(message):
     url = f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage"
@@ -26,8 +28,10 @@ def send_telegram(message):
     except Exception as e:
         print("텔레그램 전송 실패:", e)
 
+
 def get_ema(df, period):
     return df['close'].ewm(span=period).mean()
+
 
 def get_rsi(df, period=14):
     delta = df['close'].diff()
@@ -38,6 +42,7 @@ def get_rsi(df, period=14):
     rs = avg_gain / avg_loss
     return 100 - (100 / (1 + rs))
 
+
 def get_atr(df, period=14):
     high_low = df['high'] - df['low']
     high_close = (df['high'] - df['close'].shift()).abs()
@@ -46,8 +51,10 @@ def get_atr(df, period=14):
     atr = tr.rolling(window=period).mean()
     return atr
 
+
 def get_price(ticker):
     return pyupbit.get_current_price(ticker)
+
 
 def get_balance(symbol):
     balances = upbit.get_balances()
@@ -55,6 +62,7 @@ def get_balance(symbol):
         if b['currency'] == symbol:
             return float(b['balance']), float(b.get('avg_buy_price', 0))
     return 0, 0
+
 
 def get_top_volume_altcoins(n=3):
     tickers = pyupbit.get_tickers(fiat="KRW")
@@ -73,6 +81,7 @@ def get_top_volume_altcoins(n=3):
 
     volumes.sort(key=lambda x: x[1], reverse=True)
     return [v[0] for v in volumes[:n]]
+
 
 def buy_crypto(ticker, amount, atr):
     price = get_price(ticker)
@@ -96,6 +105,7 @@ def buy_crypto(ticker, amount, atr):
         f"보유 수량 : {volume:.4f}개\n"
         f"ATR (5분) : {atr:.4f}"
     )
+
 
 def sell_crypto(ticker, reason):
     global daily_loss
@@ -127,6 +137,7 @@ def sell_crypto(ticker, reason):
 
     del holding[ticker]
 
+
 def initialize_holding():
     balances = upbit.get_balances()
     for b in balances:
@@ -148,25 +159,26 @@ def initialize_holding():
             }
     send_telegram("✅ 기존 포지션 복원 완료")
 
-def trade():
-    global daily_loss
-    send_telegram("🚀 전략 시작: 고비중 + 손실제한 + 포지션 제한")
 
+def trade():
+    global daily_loss, is_stopped
+    send_telegram("🚀 전략 시작: 고비중 + 손실제한 + 포지션 제한")
     last_reset = datetime.now().date()
-    
+
     while True:
         try:
             now = datetime.now()
 
-            # ✅ 매일 오전 9시 리셋
             if now.hour == RESET_HOUR and now.date() != last_reset:
                 daily_loss = 0
+                is_stopped = False
                 last_reset = now.date()
                 send_telegram("🕘 손실 한도 초기화됨. 거래 재개 가능.")
 
-            # ✅ 손실 한도 초과 시 거래 정지
             if daily_loss >= MAX_DAILY_LOSS:
-                send_telegram(f"🛑 거래 정지됨: 당일 누적 손실 -{daily_loss*100:.2f}%")
+                if not is_stopped:
+                    send_telegram(f"🛑 거래 정지됨: 당일 누적 손실 -{daily_loss*100:.2f}%")
+                    is_stopped = True
                 time.sleep(60)
                 continue
 
@@ -175,7 +187,7 @@ def trade():
 
             for ticker in tickers:
                 if len(holding) >= MAX_HOLDINGS:
-                    break  # ✅ 최대 보유 수 제한
+                    break
 
                 symbol = ticker.split("-")[1]
                 df_5 = pyupbit.get_ohlcv(ticker, interval="minute5", count=100)
@@ -183,21 +195,17 @@ def trade():
                 if df_5 is None or df_15 is None:
                     continue
 
-                # 추세 필터
                 ema9 = get_ema(df_15, 9).iloc[-1]
                 ema21 = get_ema(df_15, 21).iloc[-1]
                 if ema9 <= ema21:
                     continue
 
-                # RSI 필터
                 rsi = get_rsi(df_5).iloc[-1]
                 if rsi >= 30 or ticker in holding:
                     continue
 
-                # ATR 계산
                 atr = get_atr(df_5).iloc[-1]
 
-                # ✅ RSI 기반 동적 비중 진입
                 if rsi < 10:
                     position_ratio = 0.20
                 elif rsi < 20:
@@ -212,7 +220,6 @@ def trade():
                 amount = krw_balance * position_ratio
                 buy_crypto(ticker, amount, atr)
 
-            # ✅ 보유 포지션에 대해 매도 체크
             for ticker in list(holding.keys()):
                 info = holding[ticker]
                 current_price = get_price(ticker)
@@ -224,7 +231,7 @@ def trade():
                 change = (current_price - entry_price) / entry_price
 
                 min_gain = 0.015
-                min_loss = 0.003
+                min_loss = 0.01
                 gain_target = max((atr / entry_price) * 1.5, min_gain)
                 loss_limit = max((atr / entry_price) * 1.0, min_loss)
 
@@ -238,6 +245,7 @@ def trade():
         except Exception as e:
             send_telegram(f"❗에러 발생: {e}")
             time.sleep(60)
+
 
 if __name__ == "__main__":
     initialize_holding()
